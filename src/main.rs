@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use bevy::{
     core_pipeline::clear_color::ClearColorConfig,
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     input::mouse::{MouseMotion, MouseWheel},
     prelude::*,
 };
@@ -33,6 +34,9 @@ impl Default for Rules {
         }
     }
 }
+
+#[derive(Component)]
+struct UiText;
 
 #[derive(Resource)]
 struct TickTimer {
@@ -71,12 +75,11 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .insert_resource(Rules::default())
         .insert_resource(TickTimer::default())
-        .add_startup_system(setup_cells)
         .add_startup_system(setup_main_camera)
-        .add_system(tick)
+        .add_startup_system(setup_cells)
         .add_system(main_camera)
-        .add_system(decay_cells)
         .add_system(color_cells)
+        .add_system(tick)
         .run();
 }
 
@@ -96,7 +99,7 @@ fn setup_cells(
             for z in 0usize..PLOT_SIZE {
                 commands.spawn((
                     Cell {
-                        alive: true,
+                        alive: false,
                         state: rules.states,
                     },
                     PbrBundle {
@@ -112,19 +115,58 @@ fn setup_cells(
     }
 }
 
-fn decay_cells(timer: Res<TickTimer>, mut query: Query<(&mut Visibility, &mut Cell)>) {
-    if !timer.timer.finished() {
-        return;
-    }
-    query
-        .iter_mut()
-        .filter(|(_, cell)| !cell.alive)
-        .for_each(|(vis, cell)| match cell.state {
-            2..=u8::MAX => cell.into_inner().state -= 1,
-            0..=1 => {
-                *vis.into_inner() = Visibility::Hidden;
-            }
-        });
+fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let font = asset_server.load("~/.fonts/");
+    commands
+        .spawn(TextBundle {
+            text: Text {
+                sections: vec![TextSection {
+                    value: "Test".to_string(),
+                    style: TextStyle {
+                        font,
+                        font_size: 13.0,
+                        color: Color::WHITE,
+                    },
+                }],
+                ..default()
+            },
+            ..default()
+        })
+        .insert(UiText);
+}
+
+fn update_ui(mut query: Query<&mut Text, With<UiText>>) {
+    let text = query.single_mut().into_inner();
+    text.sections[0].value = "Test".to_string();
+}
+
+fn setup_main_camera(mut commands: Commands, mut ambient_light: ResMut<AmbientLight>) {
+    let focus = Vec3::new(
+        PLOT_SIZE as f32 / 2.0,
+        PLOT_SIZE as f32 / 2.0,
+        PLOT_SIZE as f32 / 2.0,
+    );
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_translation(Vec3::new(
+                PLOT_SIZE as f32 / 2.0,
+                PLOT_SIZE as f32 / 2.0,
+                0.0,
+            ))
+            .looking_at(focus, Vec3::Y),
+            camera_3d: Camera3d {
+                clear_color: ClearColorConfig::Custom(Color::rgb(0.15, 0.45, 0.70)),
+                ..default()
+            },
+            ..default()
+        },
+        MainCamera {
+            radius: PLOT_SIZE as f32 * 2.0,
+            ..default()
+        },
+    ));
+    ambient_light.color = Color::WHITE;
+    ambient_light.brightness = 4.5;
 }
 
 fn color_cells(
@@ -168,9 +210,9 @@ fn main_camera(
         if rotation_move.length_squared() > 0.0 {
             any = true;
             let delta_x = rotation_move.x / window_size.x * std::f32::consts::PI * 2.0;
-            let delta_y = rotation_move.y / window_size.y * std::f32::consts::PI * 2.0;
+            // let delta_y = rotation_move.y / window_size.y * std::f32::consts::PI * 2.0;
             let yaw = Quat::from_rotation_y(-delta_x);
-            let pitch = Quat::from_rotation_x(-delta_y);
+            // let pitch = Quat::from_rotation_x(-delta_y);
             transform.rotation *= yaw;
             // transform.rotation *= pitch;
         } else if scroll.abs() > 0.0 {
@@ -188,35 +230,23 @@ fn main_camera(
     ev_motion.clear();
 }
 
-fn setup_main_camera(mut commands: Commands, mut ambient_light: ResMut<AmbientLight>) {
-    let focus = Vec3::new(
-        PLOT_SIZE as f32 / 2.0,
-        PLOT_SIZE as f32 / 2.0,
-        PLOT_SIZE as f32 / 2.0,
-    );
-    commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_translation(Vec3::new(
-                PLOT_SIZE as f32 / 2.0,
-                PLOT_SIZE as f32 / 2.0,
-                0.0,
-            ))
-            .looking_at(focus, Vec3::Y),
-            camera_3d: Camera3d {
-                clear_color: ClearColorConfig::Custom(Color::rgb(0.15, 0.45, 0.70)),
-                ..default()
-            },
-            ..default()
-        },
-        MainCamera {
-            radius: PLOT_SIZE as f32 * 2.0,
-            ..default()
-        },
-    ));
-    ambient_light.color = Color::WHITE;
-    ambient_light.brightness = 4.5;
-}
-
-fn tick(mut timer: ResMut<TickTimer>, time: Res<Time>) {
+fn tick(
+    mut timer: ResMut<TickTimer>,
+    time: Res<Time>,
+    mut query: Query<(&mut Visibility, &mut Cell)>,
+) {
     timer.timer.tick(time.delta());
+    if !timer.timer.finished() {
+        return;
+    }
+
+    query
+        .iter_mut()
+        .filter(|(_, cell)| !cell.alive)
+        .for_each(|(vis, cell)| match cell.state {
+            2..=u8::MAX => cell.into_inner().state -= 1,
+            0..=1 => {
+                *vis.into_inner() = Visibility::Hidden;
+            }
+        });
 }
