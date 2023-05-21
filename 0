@@ -1,0 +1,12 @@
+cargo run 
+warning: unused manifest key: workspaces
+   Compiling conrads-law v0.1.0 (/home/cruise/conrads-law)
+    Finished dev [optimized + debuginfo] target(s) in 1.73s
+     Running `target/debug/conrads-law`
+2023-05-21T00:26:28.338616Z  INFO bevy_winit::system: Creating new window "Bevy App" (0v0)
+2023-05-21T00:26:28.338721Z  INFO winit::platform_impl::platform::x11::window: Guessed window scale factor: 1    
+2023-05-21T00:26:28.393421Z  INFO bevy_render::renderer: AdapterInfo { name: "NVIDIA GeForce GTX 1060 6GB", vendor: 4318, device: 7171, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "530.41.03", backend: Vulkan }
+2023-05-21T00:26:36.778456Z  INFO bevy_window::system: No windows are open, exiting
+2023-05-21T00:26:36.778816Z  INFO bevy_winit::system: Closing window 0v0
+
+cargo-run finished at Sat May 20 19:26:36
