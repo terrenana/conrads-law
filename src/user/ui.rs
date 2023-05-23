@@ -3,10 +3,12 @@ use bevy::{
     prelude::*,
 };
 
+use crate::simulation::CellState;
+
 pub struct UiPlugin;
 
 #[derive(Component)]
-struct UiText;
+pub struct UiText;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
@@ -14,8 +16,19 @@ impl Plugin for UiPlugin {
             .add_startup_system(setup)
             .add_system(update_fps)
             .add_system(update_ticks)
-            .add_system(update_dead)
-            .add_system(update_states);
+            .add_system(update_states)
+            .add_system(handle_debug_keys);
+    }
+}
+
+fn handle_debug_keys(mut query: Query<&mut Visibility, With<UiText>>, keys: Res<Input<KeyCode>>) {
+    if keys.just_pressed(KeyCode::Escape) {
+        let text = query.single_mut();
+        if let Visibility::Visible = *text {
+            *text.into_inner() = Visibility::Hidden
+        } else {
+            *text.into_inner() = Visibility::Visible;
+        }
     }
 }
 
@@ -27,12 +40,18 @@ fn setup(mut commands: Commands, server: Res<AssetServer>) {
     };
 
     commands
-        .spawn(TextBundle::from_sections([
-            TextSection::new("FPS\n", style.clone()),
-            TextSection::new("TICKS\n", style.clone()),
-            TextSection::new("DEAD\n", style.clone()),
-            TextSection::new("STATES: \n", style),
-        ]))
+        .spawn(TextBundle {
+            text: Text {
+                sections: vec![
+                    TextSection::new("FPS\n", style.clone()),
+                    TextSection::new("TICKS\n", style.clone()),
+                    TextSection::new("STATES: \n", style),
+                ],
+                ..default()
+            },
+            visibility: Visibility::Hidden,
+            ..default()
+        })
         .insert(UiText);
 }
 
@@ -57,14 +76,6 @@ fn update_ticks(
     text.sections[1].value = format!("TICKS: {value}\n");
 }
 
-fn update_dead(mut text: Query<&mut Text, With<UiText>>, cells: Query<&crate::simulation::Cell>) {
-    let mut text = text.single_mut();
-
-    let value = cells.iter().filter(|cell| !cell.alive).count();
-
-    text.sections[2].value = format!("DEAD: {value}\n");
-}
-
 fn update_states(
     mut text: Query<&mut Text, With<UiText>>,
     cells: Query<&crate::simulation::Cell>,
@@ -74,15 +85,25 @@ fn update_states(
 
     let mut value = "".to_string();
 
-    for state in 0..=rules.states {
-        value.push_str(&format!("\n{state}: "));
-        value.push_str(
-            &cells
-                .iter()
-                .filter(|cell| cell.state == state)
-                .count()
-                .to_string(),
-        );
+    let dead = cells
+        .iter()
+        .filter(|cell| *cell.state.lock().unwrap() == CellState::Dead)
+        .count();
+
+    value.push_str(&format!("\nDEAD: {dead}"));
+    for state in 1..rules.states - 1 {
+        let statenum = cells
+            .iter()
+            .filter(|cell| *cell.state.lock().unwrap() == CellState::Dying(state))
+            .count();
+        value.push_str(&format!("\n{state}: {statenum}"));
     }
-    text.sections[3].value = format!("STATES: {value}\n");
+
+    let alive = cells
+        .iter()
+        .filter(|cell| *cell.state.lock().unwrap() == CellState::Alive)
+        .count();
+
+    value.push_str(&format!("\nALIVE: {alive}"));
+    text.sections[2].value = format!("STATES: {value}\n");
 }

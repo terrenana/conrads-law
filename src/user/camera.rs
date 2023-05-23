@@ -42,7 +42,7 @@ fn setup(mut commands: Commands, mut ambient_light: ResMut<AmbientLight>) {
             transform: Transform::from_translation(Vec3::new(
                 crate::PLOT_SIZE as f32 / 2.0,
                 crate::PLOT_SIZE as f32 / 2.0,
-                0.0,
+                crate::PLOT_SIZE as f32 * 2.0,
             ))
             .looking_at(focus, Vec3::Y),
             camera_3d: Camera3d {
