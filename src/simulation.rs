@@ -123,9 +123,8 @@ fn setup_cell_neighbors(mut cells: Query<&mut Cell>, positions: Query<&Position>
         let mut neighbors: Vec<Arc<Mutex<CellState>>> = Vec::new();
         for offset in helpers::MOORE_NEIGHBORHOOD.into_iter() {
             let cell = pos_cell_map.get(&helpers::add_ivec3(pos, offset));
-            match cell {
-                Some(e) => neighbors.push(e.state.clone()),
-                None => (),
+            if let Some(e) = cell {
+                neighbors.push(e.state.clone());
             };
         }
         pos_cell_map.get_mut(&pos).unwrap().neighbors = neighbors;

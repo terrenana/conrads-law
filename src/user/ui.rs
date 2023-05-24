@@ -3,7 +3,7 @@ use bevy::{
     prelude::*,
 };
 
-use crate::simulation::CellState;
+use crate::simulation::{CellColorMode, CellState, TickTimer, Toggleables};
 
 pub struct UiPlugin;
 
@@ -16,6 +16,7 @@ impl Plugin for UiPlugin {
             .add_startup_system(setup)
             .add_system(update_fps)
             .add_system(update_ticks)
+            .add_system(update_debug)
             .add_system(update_states)
             .add_system(handle_debug_keys);
     }
@@ -61,7 +62,7 @@ fn update_fps(diag: Res<Diagnostics>, mut query: Query<&mut Text, With<UiText>>)
 
     if let Some(fps) = diag.get(FrameTimeDiagnosticsPlugin::FPS) {
         if let Some(value) = fps.smoothed() {
-            text.sections[0].value = format!("FPS: {value}\n")
+            text.sections[0].value = format!("FPS: {value}")
         }
     }
 }
@@ -74,7 +75,32 @@ fn update_ticks(
 
     let value = timer.ticks;
 
-    text.sections[1].value = format!("TICKS: {value}\n");
+    text.sections[1].value = format!("\nTICKS: {value}");
+}
+
+fn update_debug(
+    mut text: Query<&mut Text, With<UiText>>,
+    debug: Res<Toggleables>,
+    timer: Res<TickTimer>,
+) {
+    let mut text = text.single_mut();
+    let mut value = "".to_string();
+
+    if debug.suppress_death {
+        value.push_str("\nDEATH SUPPRESSED");
+    } else {
+        value.push('\n');
+    }
+    if timer.timer.paused() {
+        value.push_str("\nPAUSED");
+    } else {
+        value.push('\n');
+    }
+    value.push_str(match debug.cell_color_mode {
+        CellColorMode::State => "\nC_MODE: state",
+        CellColorMode::Dist => "\nC_MODE: dist",
+    });
+    text.sections[2].value = value;
 }
 
 fn update_states(
@@ -84,7 +110,7 @@ fn update_states(
 ) {
     let mut text = text.single_mut();
 
-    let mut value = "".to_string();
+    let mut value = String::new();
 
     let dead = cells
         .iter()
@@ -106,5 +132,5 @@ fn update_states(
         .count();
 
     value.push_str(&format!("\nALIVE: {alive}"));
-    text.sections[2].value = format!("STATES: {value}\n");
+    text.sections[3].value = format!("\nSTATES: {value}");
 }
