@@ -1,12 +1,11 @@
 use std::{
-    cell::RefCell,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use crate::helpers;
 
-use bevy::{ecs::component::Tick, prelude::*, utils::hashbrown::HashMap};
+use bevy::{prelude::*, utils::hashbrown::HashMap};
 use rand::{self, Rng};
 
 #[derive(Component, Debug)]
@@ -17,12 +16,23 @@ pub struct Cell {
 #[derive(Component, Debug)]
 struct Position(IVec3);
 #[derive(Resource)]
-struct Toggleables {
-    suppress_death: bool,
-    cell_color_mode: CellColorMode,
+pub struct Toggleables {
+    pub suppress_death: bool,
+    pub cell_color_mode: CellColorMode,
+    pub step: bool,
 }
 
-enum CellColorMode {
+impl Default for Toggleables {
+    fn default() -> Self {
+        Toggleables {
+            suppress_death: false,
+            cell_color_mode: CellColorMode::State,
+            step: false,
+        }
+    }
+}
+
+pub enum CellColorMode {
     State,
     Dist,
 }
@@ -169,13 +179,17 @@ fn tick(
     time: Res<Time>,
     mut query: Query<(&mut Visibility, &mut Cell)>,
     rules: Res<Rules>,
-    debug: Res<Toggleables>,
+    mut debug: ResMut<Toggleables>,
 ) {
-    timer.timer.tick(time.delta());
-    if !timer.timer.just_finished() {
-        return;
+    if !debug.step {
+        timer.timer.tick(time.delta());
+        if !timer.timer.just_finished() {
+            return;
+        }
+        timer.ticks += 1;
+    } else {
+        debug.step = false;
     }
-    timer.ticks += 1;
 
     query.iter_mut().for_each(|(vis, cell)| {
         let mut cell_state_mutex_lock = cell.state.lock().unwrap();
@@ -218,20 +232,23 @@ fn tick(
     });
 }
 
-fn spawn_cell_noise(query: Query<(&Cell, &Position)>, keys: Res<Input<KeyCode>>) {
+fn spawn_cell_noise(
+    query: Query<(&Cell, &Position)>,
+    keys: Res<Input<KeyCode>>,
+    mut debug: ResMut<Toggleables>,
+    timer: Res<TickTimer>,
+) {
     if keys.just_pressed(KeyCode::Return) {
         let mut rand = rand::thread_rng();
-        let center = IVec3::new(
-            crate::PLOT_SIZE as i32 / 2,
-            crate::PLOT_SIZE as i32 / 2,
-            crate::PLOT_SIZE as i32 / 2,
-        );
         for (cell, pos) in query.iter() {
-            if helpers::distance(pos.0, center) <= crate::PLOT_SIZE as i32 / 4 {
+            if helpers::square_distance(pos.0, crate::PLOT_SIZE as i32 / 2) {
                 if rand.gen_range(1..=2) == 2 {
                     *cell.state.lock().unwrap() = CellState::Alive;
                 }
             }
+        }
+        if timer.timer.paused() {
+            debug.step = true;
         }
     }
 }
@@ -256,6 +273,10 @@ fn handle_keys(
         query
             .iter_mut()
             .for_each(|cell| *cell.state.lock().unwrap() = CellState::Dead);
+    } else if keys.just_pressed(KeyCode::S) {
+        toggleables.suppress_death = !toggleables.suppress_death;
+    } else if keys.just_pressed(KeyCode::Right) {
+        toggleables.step = true;
     }
 }
 
@@ -265,10 +286,7 @@ impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Rules::default())
             .insert_resource(TickTimer::default())
-            .insert_resource(Toggleables {
-                suppress_death: false,
-                cell_color_mode: CellColorMode::State,
-            })
+            .insert_resource(Toggleables::default())
             .add_startup_system(setup_cells)
             .add_startup_system(setup_cell_materials.in_base_set(StartupSet::PreStartup))
             .add_startup_system(setup_cell_neighbors.in_base_set(StartupSet::PostStartup))

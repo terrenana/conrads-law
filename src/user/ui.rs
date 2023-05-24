@@ -45,6 +45,7 @@ fn setup(mut commands: Commands, server: Res<AssetServer>) {
                 sections: vec![
                     TextSection::new("FPS\n", style.clone()),
                     TextSection::new("TICKS\n", style.clone()),
+                    TextSection::new("", style.clone()),
                     TextSection::new("STATES: \n", style),
                 ],
                 ..default()

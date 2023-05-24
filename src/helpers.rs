@@ -38,8 +38,13 @@ pub fn moore(target: IVec3, other: IVec3) -> bool {
     return false;
 }
 
-pub fn distance(target: IVec3, other: IVec3) -> i32 {
-    target.as_vec3().distance(other.as_vec3()) as i32
+pub fn square_distance(target: IVec3, center_dist: i32) -> bool {
+    target.x < crate::PLOT_SIZE as i32 / 3 + center_dist
+        && crate::PLOT_SIZE as i32 / 3 < target.x
+        && target.y < crate::PLOT_SIZE as i32 / 3 + center_dist
+        && crate::PLOT_SIZE as i32 / 3 < target.y
+        && target.z < crate::PLOT_SIZE as i32 / 3 + center_dist
+        && crate::PLOT_SIZE as i32 / 3 < target.z
 }
 
 pub fn add_ivec3(a: IVec3, b: IVec3) -> IVec3 {
