@@ -51,7 +51,7 @@ fn setup(mut commands: Commands, server: Res<AssetServer>) {
                 ],
                 ..default()
             },
-            visibility: Visibility::Hidden,
+            visibility: Visibility::Visible,
             ..default()
         })
         .insert(UiText);
@@ -106,7 +106,7 @@ fn update_debug(
 fn update_states(
     mut text: Query<&mut Text, With<UiText>>,
     cells: Query<&crate::simulation::Cell>,
-    rules: Res<crate::simulation::Rules>,
+    rules: Res<crate::rules::Rules>,
 ) {
     let mut text = text.single_mut();
 
