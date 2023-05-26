@@ -73,8 +73,8 @@ impl Rule {
 impl Rules {
     pub fn _445() -> Self {
         Rules {
-            survival: Rule::Single(4),
-            born: Rule::Single(4),
+            survival: Rule::Single(3),
+            born: Rule::Single(3),
             states: 5,
             neighborhood_matrix: MOORE_NEIGHBORHOOD.to_vec(),
         }

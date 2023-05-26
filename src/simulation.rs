@@ -4,10 +4,13 @@ use std::{
     time::Duration,
 };
 
-use crate::helpers::{self, c32, CVec3};
 use crate::rules::*;
+use crate::{
+    helpers::{self, c32, CVec3},
+    PLOT_SIZE,
+};
 
-use bevy::{prelude::*, utils::hashbrown::HashMap};
+use bevy::{math::ivec3, prelude::*, utils::hashbrown::HashMap};
 
 #[derive(Component, Debug)]
 pub struct Cell {
@@ -231,7 +234,7 @@ fn spawn_cell_noise(
         let mut rand = rand::thread_rng();
         for (cell, pos) in query.iter() {
             if helpers::noise_func(pos.0, 10.0) {
-                if rand.gen_range(1..=2) == 2 {
+                if rand.gen_range(1..=5) == 2 {
                     *cell.buffered_state.lock().unwrap() = Some(CellState::Alive);
                 }
             }
@@ -259,9 +262,10 @@ fn handle_keys(
             CellColorMode::Dist => CellColorMode::State,
         };
     } else if keys.just_pressed(KeyCode::Back) {
-        query
-            .iter_mut()
-            .for_each(|cell| *cell.state.lock().unwrap() = CellState::Dead);
+        query.iter_mut().for_each(|cell| {
+            *cell.state.lock().unwrap() = CellState::Dead;
+            *cell.buffered_state.lock().unwrap() = Some(CellState::Dead);
+        })
     } else if keys.just_pressed(KeyCode::S) {
         toggleables.suppress_death = !toggleables.suppress_death;
     } else if keys.just_pressed(KeyCode::Right) {
