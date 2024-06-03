@@ -2,49 +2,59 @@ use std::ops::RangeInclusive;
 
 use bevy::{math::ivec3, prelude::*};
 
-pub static MOORE_NEIGHBORHOOD: [IVec3; 26] = [
-    ivec3(-1, -1, -1),
-    ivec3(0, -1, -1),
-    ivec3(1, -1, -1),
-    ivec3(-1, 0, -1),
-    ivec3(0, 0, -1),
-    ivec3(1, 0, -1),
-    ivec3(-1, 1, -1),
-    ivec3(0, 1, -1),
-    ivec3(1, 1, -1),
-    ivec3(-1, -1, 0),
-    ivec3(0, -1, 0),
-    ivec3(1, -1, 0),
-    ivec3(-1, 0, 0),
-    ivec3(1, 0, 0),
-    ivec3(-1, 1, 0),
-    ivec3(0, 1, 0),
-    ivec3(1, 1, 0),
-    ivec3(-1, -1, 1),
-    ivec3(0, -1, 1),
-    ivec3(1, -1, 1),
-    ivec3(-1, 0, 1),
-    ivec3(0, 0, 1),
-    ivec3(1, 0, 1),
-    ivec3(-1, 1, 1),
-    ivec3(0, 1, 1),
-    ivec3(1, 1, 1),
+pub static MOORE_NEIGHBORHOOD: [(isize, isize, isize); 26] = [
+    (-1, -1, -1),
+    (0, -1, -1),
+    (1, -1, -1),
+    (-1, 0, -1),
+    (0, 0, -1),
+    (1, 0, -1),
+    (-1, 1, -1),
+    (0, 1, -1),
+    (1, 1, -1),
+    (-1, -1, 0),
+    (0, -1, 0),
+    (1, -1, 0),
+    (-1, 0, 0),
+    (1, 0, 0),
+    (-1, 1, 0),
+    (0, 1, 0),
+    (1, 1, 0),
+    (-1, -1, 1),
+    (0, -1, 1),
+    (1, -1, 1),
+    (-1, 0, 1),
+    (0, 0, 1),
+    (1, 0, 1),
+    (-1, 1, 1),
+    (0, 1, 1),
+    (1, 1, 1),
 ];
 
-pub static VN_NEIGHBORHOOD: [IVec3; 6] = [
-    ivec3(1, 0, 0),
-    ivec3(0, 1, 0),
-    ivec3(0, 0, 1),
-    ivec3(-1, 0, 0),
-    ivec3(0, -1, 0),
-    ivec3(0, 0, -1),
+const MOORE_NEIGHBORHOOD_2D: [(isize, isize); 8] = [
+    (1, 1),
+    (1, 0),
+    (1, -1),
+    (0, 1),
+    (0, -1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+];
+pub static VN_NEIGHBORHOOD: [(isize, isize, isize); 6] = [
+    (1, 0, 0),
+    (0, 1, 0),
+    (0, 0, 1),
+    (-1, 0, 0),
+    (0, -1, 0),
+    (0, 0, -1),
 ];
 #[derive(Resource)]
 pub struct Rules {
     pub survival: Rule,
     pub born: Rule,
-    pub states: u8,
-    pub neighborhood_matrix: Vec<IVec3>,
+    pub states: usize,
+    pub neighborhood_matrix: Vec<(isize, isize)>,
 }
 
 pub enum Rule {
@@ -56,7 +66,9 @@ pub enum Rule {
 impl Rule {
     pub fn has_match(&self, match_target: u8) -> bool {
         match self {
-            Rule::Single(n) => match_target == *n,
+            Rule::Single(n) => {
+                match_target == *n
+            },
             Rule::Range(range) => range.contains(&match_target),
             Rule::Multi(vec) => {
                 for rule in vec {
@@ -71,11 +83,28 @@ impl Rule {
 }
 
 impl Rules {
-    pub fn _445() -> Self {
+    pub fn _2dgol() -> Self {
         Rules {
-            survival: Rule::Single(3),
+            survival: Rule::Range(2..=3),
             born: Rule::Single(3),
             states: 5,
+            neighborhood_matrix: MOORE_NEIGHBORHOOD_2D.to_vec()
+        }
+    }
+    /*
+    pub fn _445() -> Self {
+        Rules {
+            survival: Rule::Single(4),
+            born: Rule::Single(4),
+            states: 5,
+            neighborhood_matrix: MOORE_NEIGHBORHOOD.to_vec(),
+        }
+    }
+    pub fn _455() -> Self {
+        Rules {
+            survival: Rule::Range(4..=5),
+            born: Rule::Single(5),
+            states: 2,
             neighborhood_matrix: MOORE_NEIGHBORHOOD.to_vec(),
         }
     }
@@ -122,11 +151,11 @@ impl Rules {
             states: 2,
             neighborhood_matrix: VN_NEIGHBORHOOD.to_vec(),
         }
-    }
+    }*/
 }
 
 impl Default for Rules {
     fn default() -> Self {
-        Rules::_445()
+        Rules::_2dgol()
     }
 }

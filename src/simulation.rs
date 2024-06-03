@@ -1,292 +1,162 @@
-use rand::Rng;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use core::fmt;
+use std::fmt::Display;
+use std::time::Duration;
+use bevy::prelude::*;
+use bevy::time::common_conditions::on_timer;
 
-use crate::rules::*;
-use crate::{
-    helpers::{self, c32, CVec3},
-    PLOT_SIZE,
-};
+use crate::rules::Rules;
+use crate::user::ui::Settings;
+use crate::PLOT_SIZE;
 
-use bevy::{math::ivec3, prelude::*, utils::hashbrown::HashMap};
 
-#[derive(Component, Debug)]
-pub struct Cell {
-    pub state: Arc<Mutex<CellState>>,
-    pub buffered_state: Mutex<Option<CellState>>,
-    pub neighbors: Vec<Arc<Mutex<CellState>>>,
-}
-#[derive(Component, Debug)]
-struct Position(CVec3);
-#[derive(Resource)]
-pub struct Toggleables {
-    pub suppress_death: bool,
-    pub cell_color_mode: CellColorMode,
-    pub step: bool,
-}
-
-impl Default for Toggleables {
-    fn default() -> Self {
-        Toggleables {
-            suppress_death: false,
-            cell_color_mode: CellColorMode::State,
-            step: false,
-        }
-    }
-}
-
-pub enum CellColorMode {
-    State,
-    Dist,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum CellState {
+#[derive(Clone, Debug)]
+pub enum _CellState {
     Alive,
-    Dying(u8),
-    Dead,
+    Dying(usize),
+    Dead
 }
 
-#[derive(Resource)]
-struct MaterialHandles {
-    default_color: Handle<StandardMaterial>,
-    state_colors: Vec<Handle<StandardMaterial>>,
-}
-
-#[derive(Resource)]
-pub struct TickTimer {
-    pub timer: Timer,
-    pub ticks: u64,
-}
-
-impl Default for TickTimer {
-    fn default() -> Self {
-        TickTimer {
-            timer: Timer::new(Duration::from_millis(100), TimerMode::Repeating),
-            ticks: 0,
+impl Display for _CellState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            _CellState::Alive => write!(f, "⬛"),
+            _CellState::Dying(x) => write!(f, "{x}"),
+            _CellState::Dead => write!(f, " "),
         }
     }
 }
 
-fn setup_cells(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mats: Res<MaterialHandles>,
-) {
-    let mesh_handle = meshes.add(shape::Cube::new(1.0).into());
-    for x in 0..=crate::PLOT_SIZE {
-        for y in 0..=crate::PLOT_SIZE {
-            for z in 0..=crate::PLOT_SIZE {
-                commands.spawn((
-                    Cell {
-                        state: Arc::new(Mutex::new(CellState::Dead)),
-                        buffered_state: Mutex::new(None),
-                        neighbors: Vec::new(),
-                    },
-                    Position(CVec3::new(x, y, z)),
-                    PbrBundle {
-                        mesh: mesh_handle.clone(),
-                        transform: Transform::from_xyz(x as f32, y as f32, z as f32),
-                        visibility: Visibility::Hidden,
-                        material: mats.default_color.clone(),
-                        ..default()
-                    },
-                ));
-            }
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct CellArray {
+    pub data: Vec<Vec<_CellState>>,
+    dim: usize
 }
 
-fn setup_cell_matrix(mut cells: Query<&mut Cell>, positions: Query<&Position>, rules: Res<Rules>) {
-    let mut pos_cell_map: HashMap<CVec3, Mut<Cell>> = HashMap::new();
-    cells
-        .iter_mut()
-        .zip(positions.iter())
-        .for_each(|(cell, pos)| {
-            pos_cell_map.insert(pos.0, cell);
+impl Display for CellArray {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut disp = String::new();
+        self.data.iter().for_each(|c| {
+            c.iter().for_each(|r| {
+                disp += &format!("{} ", r);
+            });
+            disp += "\n";
         });
-    for pos in positions.iter().map(|pos| pos.0) {
-        let mut neighbors: Vec<Arc<Mutex<CellState>>> = Vec::new();
-        for offset in rules.neighborhood_matrix.iter() {
-            let cell = pos_cell_map.get(&(pos + *offset));
-            if let Some(e) = cell {
-                neighbors.push(e.state.clone());
-            };
-        }
-        pos_cell_map.get_mut(&pos).unwrap().neighbors = neighbors;
+        write!(f, "{disp}")
     }
 }
 
-fn setup_cell_materials(mut commands: Commands, mut mats: ResMut<Assets<StandardMaterial>>) {
-    commands.insert_resource(MaterialHandles {
-        default_color: mats.add(StandardMaterial {
-            base_color: crate::STATE_DEFAULT_COLOR,
-            ..default()
-        }),
-        state_colors: crate::GREEN_TO_RED
-            .iter()
-            .map(|color| {
-                mats.add(StandardMaterial {
-                    base_color: *color,
-                    ..default()
-                })
-            })
-            .collect(),
-    });
+impl CellArray {
+    fn new(dim: usize) -> Self {
+        CellArray{
+            data: vec![vec![_CellState::Dead; dim]; dim],
+            dim
+        }   
+    }
+    pub fn get(&self, i: isize, j: isize) -> &_CellState {
+        let dim = self.dim as isize;
+        let x = ((i % dim + dim) % dim) as usize;
+        let y = ((j % dim + dim) % dim) as usize;
+        &self.data[x][y]
+    }
 }
 
-fn color_cells(
-    mut query: Query<(&mut Handle<StandardMaterial>, &Cell, &mut Visibility)>,
-    mats: Res<MaterialHandles>,
-    rules: Res<Rules>,
-    color_rule: Res<Toggleables>,
-) {
-    match color_rule.cell_color_mode {
-        CellColorMode::State => {
-            for (material, cell, vis) in query.iter_mut() {
-                *material.into_inner() = mats
-                    .state_colors
-                    .get(match *cell.state.lock().unwrap() {
-                        CellState::Alive => {
-                            *vis.into_inner() = Visibility::Visible;
-                            rules.states
+#[derive(Debug, Clone, Resource)]
+pub struct SimulationState {
+    pub current: CellArray,
+    buffer: CellArray,
+    pub ticks: u32
+}
+
+unsafe impl Send for SimulationState {}
+unsafe impl Sync for SimulationState {}
+
+impl Display for SimulationState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.current)
+    }
+}
+
+fn setup(mut commands: Commands) {
+    let mut state = SimulationState {
+        current: CellArray::new(PLOT_SIZE),
+        buffer: CellArray::new(PLOT_SIZE),
+        ticks: 0
+    };
+    state.buffer.data[20][1] = _CellState::Alive;
+    state.buffer.data[20][2] = _CellState::Alive;
+    state.buffer.data[20][3] = _CellState::Alive;
+
+    state.buffer.data[25][26] = _CellState::Alive;
+    state.buffer.data[26][25] = _CellState::Alive;
+    state.buffer.data[27][25] = _CellState::Alive;
+    state.buffer.data[27][26] = _CellState::Alive;
+    state.buffer.data[27][27] = _CellState::Alive;
+    commands.insert_resource(state);
+    commands.insert_resource(Rules::_2dgol());
+}
+
+
+fn tick(state: ResMut<SimulationState>, rules: Res<Rules>, settings: Res<Settings>) {
+    if settings.paused {
+        return;
+    }
+    let state = state.into_inner();
+    state.ticks += 1;
+    //println!("{}", state);
+    state.current = state.buffer.clone();
+    state.buffer = CellArray::new(PLOT_SIZE);
+
+    for (i, row) in state.buffer.data.iter_mut().enumerate() {
+        for (j, cell) in row.iter_mut().enumerate() {
+            let mut alive_ct = 0;
+            for (x, y) in rules.neighborhood_matrix.iter() {
+                match state.current.get(i as isize - x, j as isize - y) {
+                    _CellState::Alive => alive_ct += 1,
+                    _ => ()
+                }
+            }
+            *cell = match state.current.get(i as isize, j as isize) {
+                _CellState::Alive => {
+                    if rules.survival.has_match(alive_ct) {
+                        _CellState::Alive
+                    } else {
+                        if rules.states == 2 {
+                            _CellState::Dead
+                        } else {
+                            _CellState::Dying(rules.states - 1)
                         }
-                        CellState::Dying(x) => x,
-                        CellState::Dead => 0,
-                    } as usize)
-                    .unwrap_or(&mats.default_color)
-                    .clone();
-            }
-        }
-        CellColorMode::Dist => {}
-    }
-}
-
-fn tick(
-    mut timer: ResMut<TickTimer>,
-    time: Res<Time>,
-    mut query: Query<(&mut Visibility, &mut Cell)>,
-    rules: Res<Rules>,
-    mut debug: ResMut<Toggleables>,
-) {
-    if !debug.step {
-        timer.timer.tick(time.delta());
-        if !timer.timer.just_finished() {
-            return;
-        }
-        timer.ticks += 1;
-    } else {
-        debug.step = false;
-    }
-
-    query.iter_mut().for_each(|(vis, cell)| {
-        let mut cell_state_mutex_lock = cell.state.lock().unwrap();
-        let mut cell_buffer_mutex_lock = cell.buffered_state.lock().unwrap();
-        if let Some(state) = *cell_buffer_mutex_lock {
-            *cell_state_mutex_lock = state;
-            *cell_buffer_mutex_lock = None;
-        }
-        match *cell_state_mutex_lock {
-            CellState::Alive => {
-                let alive_neighbor_ct = cell
-                    .neighbors
-                    .iter()
-                    .filter(|&n| *n.lock().unwrap() == CellState::Alive)
-                    .count() as u8;
-
-                if !rules.survival.has_match(alive_neighbor_ct) && !debug.suppress_death {
-                    *cell_buffer_mutex_lock = Some(CellState::Dying(rules.states - 1));
-                }
-            }
-            CellState::Dying(x) => {
-                match x {
-                    2..=u8::MAX => *cell_state_mutex_lock = CellState::Dying(x - 1),
-                    0..=1 => {
-                        *vis.into_inner() = Visibility::Hidden;
-                        *cell_buffer_mutex_lock = Some(CellState::Dead);
                     }
-                };
-            }
-            CellState::Dead => {
-                *vis.into_inner() = Visibility::Hidden;
-                let alive_neighbor_ct = cell
-                    .neighbors
-                    .iter()
-                    .filter(|&n| *n.lock().unwrap() == CellState::Alive)
-                    .count() as u8;
-                if rules.born.has_match(alive_neighbor_ct) {
-                    *cell_buffer_mutex_lock = Some(CellState::Alive);
+                },
+                _CellState::Dying(n) => {
+                    if n == &1usize {
+                        _CellState::Dead
+                    } else if rules.born.has_match(alive_ct) {
+                        _CellState::Alive
+                    } else {
+                        _CellState::Dying(n-1)
+                    }
+                },
+                _CellState::Dead => {
+                    if rules.born.has_match(alive_ct) {
+                        _CellState::Alive
+                    } else {
+                        _CellState::Dead
+                    }
                 }
             }
-        }
-    });
-}
-
-fn spawn_cell_noise(
-    query: Query<(&Cell, &Position)>,
-    keys: Res<Input<KeyCode>>,
-    mut debug: ResMut<Toggleables>,
-    timer: Res<TickTimer>,
-) {
-    if keys.just_pressed(KeyCode::Return) {
-        let mut rand = rand::thread_rng();
-        for (cell, pos) in query.iter() {
-            if helpers::noise_func(pos.0, 10.0) {
-                if rand.gen_range(1..=5) == 2 {
-                    *cell.buffered_state.lock().unwrap() = Some(CellState::Alive);
-                }
-            }
-        }
-        if timer.timer.paused() {
-            debug.step = true;
         }
     }
 }
 
-fn handle_keys(
-    keys: Res<Input<KeyCode>>,
-    mut timer: ResMut<TickTimer>,
-    mut toggleables: ResMut<Toggleables>,
-    mut query: Query<&Cell>,
-) {
-    if keys.just_pressed(KeyCode::Space) {
-        match timer.timer.paused() {
-            true => timer.timer.unpause(),
-            false => timer.timer.pause(),
-        }
-    } else if keys.just_pressed(KeyCode::M) {
-        toggleables.cell_color_mode = match toggleables.cell_color_mode {
-            CellColorMode::State => CellColorMode::Dist,
-            CellColorMode::Dist => CellColorMode::State,
-        };
-    } else if keys.just_pressed(KeyCode::Back) {
-        query.iter_mut().for_each(|cell| {
-            *cell.state.lock().unwrap() = CellState::Dead;
-            *cell.buffered_state.lock().unwrap() = Some(CellState::Dead);
-        })
-    } else if keys.just_pressed(KeyCode::S) {
-        toggleables.suppress_death = !toggleables.suppress_death;
-    } else if keys.just_pressed(KeyCode::Right) {
-        toggleables.step = true;
-        timer.ticks += 1;
-    }
-}
 
 pub struct SimulationPlugin;
 
 impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Rules::_445())
-            .insert_resource(TickTimer::default())
-            .insert_resource(Toggleables::default())
-            .add_startup_system(setup_cells)
-            .add_startup_system(setup_cell_materials.in_base_set(StartupSet::PreStartup))
-            .add_startup_system(setup_cell_matrix.in_base_set(StartupSet::PostStartup))
-            .add_system(spawn_cell_noise)
-            .add_system(color_cells)
-            .add_system(handle_keys)
-            .add_system(tick);
+        app
+            .add_startup_system(setup.in_base_set(StartupSet::PreStartup))
+            .add_system(tick
+                        .run_if(on_timer(Duration::from_secs(1)))
+                        .in_base_set(CoreSet::Update));
     }
 }
